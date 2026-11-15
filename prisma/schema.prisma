@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SystemRole {
+  ADMIN_HR
+  MANAGER
+  EMPLOYEE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  DEACTIVATED
+}
+
+enum CycleStatus {
+  COMPLETED
+  IN_PROGRESS
+  PENDING
+  OVERDUE
+  UPCOMING
+}
+
+enum ObjectiveCategory {
+  BUSINESS
+  TECHNICAL
+  BEHAVIOURAL
+  DEVELOPMENT
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  role         SystemRole @default(EMPLOYEE)
+  employee     Employee?
+  auditLogs    AuditLog[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model RoleTemplate {
+  id                String              @id @default(cuid())
+  title             String              @unique
+  department        String
+  gradeBand         String
+  purpose           String
+  responsibilities  String[]
+  skills            String[]
+  qualifications    String
+  kpis              String[]
+  workingConditions String
+  tools             String[]
+  successFactors    String[]
+  careerPath        String
+  objectives        TemplateObjective[]
+  employees         Employee[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model TemplateObjective {
+  id             String            @id @default(cuid())
+  roleTemplateId String
+  roleTemplate   RoleTemplate      @relation(fields: [roleTemplateId], references: [id], onDelete: Cascade)
+  title          String
+  category       ObjectiveCategory
+  description    String
+  measureKpi     String
+  target         String
+  weightage      Int
+}
+
+model Employee {
+  id               String             @id @default(cuid())
+  employeeCode     String             @unique
+  userId           String             @unique
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName        String
+  lastName         String
+  designation      String
+  department       String
+  grade            String
+  location         String
+  joiningDate      DateTime
+  totalExperience  Float
+  currentCtc       Int
+  lastRating       Float?
+  cycleStatus      CycleStatus        @default(IN_PROGRESS)
+  status           EmployeeStatus     @default(ACTIVE)
+
+  managerId        String?
+  manager          Employee?          @relation("ReportingHierarchy", fields: [managerId], references: [id])
+  directReports    Employee[]         @relation("ReportingHierarchy")
+
+  roleTemplateId   String?
+  roleTemplate     RoleTemplate?      @relation(fields: [roleTemplateId], references: [id])
+
+  jobDescription   JobDescription?
+  objectives       Objective[]
+  feedbackSessions FeedbackSession[]
+  currentAppraisal Appraisal?
+  appraisalHistory AppraisalHistory[]
+  documents        EmployeeDocument[]
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@index([department])
+  @@index([managerId])
+}
+
+model JobDescription {
+  id                String      @id @default(cuid())
+  employeeId        String      @unique
+  employee          Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  jobTitle          String
+  purpose           String
+  reportingLine     String
+  responsibilities  String[]
+  skills            String[]
+  qualifications    String
+  kpis              String[]
+  workingConditions String
+  tools             String[]
+  successFactors    String[]
+  careerPath        String
+  version           Int         @default(1)
+  versions          JDVersion[]
+  updatedAt         DateTime    @updatedAt
+}
+
+model JDVersion {
+  id               String         @id @default(cuid())
+  jobDescriptionId String
+  jobDescription   JobDescription @relation(fields: [jobDescriptionId], references: [id], onDelete: Cascade)
+  versionNumber    Int
+  snapshot         Json
+  editedBy         String
+  changeNote       String?
+  createdAt        DateTime       @default(now())
+}
+
+model Objective {
+  id             String            @id @default(cuid())
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  appraisalYear  String            @default("2026-27")
+  title          String
+  category       ObjectiveCategory
+  description    String
+  measureKpi     String
+  target         String
+  weightage      Int
+  timeline       String
+  progress       Int               @default(0)
+  status         CycleStatus       @default(IN_PROGRESS)
+  selfRating     Float?
+  managerRating  Float?
+  approvedByMgr  Boolean           @default(false)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+model FeedbackSession {
+  id                 String      @id @default(cuid())
+  employeeId         String
+  employee           Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  appraisalYear      String      @default("2026-27")
+  sessionNumber      Int
+  scheduledDate      DateTime
+  completedDate      DateTime?
+  status             CycleStatus @default(UPCOMING)
+  participants       String[]
+  objectiveReview    String?
+  achievements       String?
+  challenges         String?
+  managerFeedback    String?
+  employeeReflection String?
+  competencyRatings  Json?
+  actionItems        Json?
+  developmentPlan    String?
+  overallRating      Float?
+  employeeAck        Boolean     @default(false)
+  employeeAckDate    DateTime?
+  managerAck         Boolean     @default(false)
+  managerAckDate     DateTime?
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([employeeId, appraisalYear, sessionNumber])
+}
+
+model Appraisal {
+  id                      String      @id @default(cuid())
+  employeeId              String      @unique
+  employee                Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  appraisalYear           String      @default("2026-27")
+  selfSummary             String?
+  selfRating              Float?
+  managerSummary          String?
+  managerRating           Float?
+  hrCalibrationNotes      String?
+  finalRating             Float?
+  promotionRecommended    Boolean     @default(false)
+  recommendedDesignation  String?
+  incrementPercentage     Float?
+  status                  CycleStatus @default(PENDING)
+  updatedAt               DateTime    @updatedAt
+}
+
+model AppraisalHistory {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  year          String
+  finalRating   Float
+  incrementPct  Float
+  promoted      Boolean  @default(false)
+  designation   String
+  ctcAtTime     Int
+  remarks       String
+}
+
+model EmployeeDocument {
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  title       String
+  type        String
+  isPrivate   Boolean  @default(false)
+  contentUrl  String?
+  noteBody    String?
+  uploadedBy  String
+  createdAt   DateTime @default(now())
+}
+
+model CycleConfig {
+  id              String   @id @default("default-cycle")
+  appraisalYear   String   @default("2026-27")
+  sessionWindows  Json
+  ratingScale     Json
+  competencies    String[]
+  requireExact100 Boolean  @default(true)
+  reminderDays    Int      @default(7)
+  updatedAt       DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  actor       User     @relation(fields: [actorId], references: [id])
+  actorName   String
+  action      String
+  entityType  String
+  entityId    String
+  details     String
+  createdAt   DateTime @default(now())
+}
